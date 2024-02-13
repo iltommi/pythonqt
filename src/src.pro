@@ -29,12 +29,6 @@ QT += widgets core-private
 
 INCLUDEPATH += $$PWD
 
-macx {
-  contains(QT_MAJOR_VERSION, 6) {
-    QMAKE_APPLE_DEVICE_ARCHS = x86_64 arm64
-  }
-}
-
 include ( ../build/common.prf )  
 include ( ../build/python.prf )
 TARGET = $$replace(TARGET, PythonXY, Python$${PYTHON_VERSION})
