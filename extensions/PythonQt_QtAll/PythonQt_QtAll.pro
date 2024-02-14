@@ -30,14 +30,13 @@ isEmpty( PYTHONQTALL_CONFIG ) {
   CONFIG += $${PYTHONQTALL_CONFIG}
 }
 
-TARGET   = PythonQt_QtAll-Qt$${QT_MAJOR_VERSION}-PythonXY
+TARGET   = PythonQt_QtAll-Qt$${QT_MAJOR_VERSION}
 TEMPLATE = lib
 
 DESTDIR    = ../../lib
 
 include ( ../../build/common.prf )  
 include ( ../../build/PythonQt.prf )  
-TARGET = $$replace(TARGET, PythonXY, Python$${PYTHON_VERSION})
 
 CONFIG += qt strict_c++ msvc_mp
 
@@ -57,7 +56,7 @@ SOURCES +=                \
 
 unix {
   CONFIG += create_pc create_prl no_install_prl
-  QMAKE_PKGCONFIG_NAME = PythonQt_QtAll-Qt$${QT_MAJOR_VERSION}-Python$${PYTHON_VERSION}
+  QMAKE_PKGCONFIG_NAME = PythonQt_QtAll-Qt$${QT_MAJOR_VERSION}
   QMAKE_PKGCONFIG_DESCRIPTION = Dynamic Python binding for the Qt framework
   QMAKE_PKGCONFIG_PREFIX = $$INSTALLBASE
   QMAKE_PKGCONFIG_LIBDIR = $$target.path
