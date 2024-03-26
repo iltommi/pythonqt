@@ -47,9 +47,22 @@ contains(PKGCONFIG, "python.*"){
   PYTHON_LIBDIR = $$system($$pkgConfigExecutable() --libs-only-L $$PYTHON_PKGCONFIG)
   QMAKE_RPATHDIR += $$replace(PYTHON_LIBDIR,-L,)
 } else:macx:isEmpty(PYTHON_DIR){
+
   # for macx you need to have the Python development kit installed as framework
-  INCLUDEPATH += /System/Library/Frameworks/Python.framework/Headers
-  LIBS += -F/System/Library/Frameworks -framework Python
+#   INCLUDEPATH += /Library/Frameworks/Python.framework/Versions/3.12/include/python3.12
+#   LIBS = -F/Library/Frameworks -framework Python $${LIBS}
+  INCLUDEPATH += /Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/Headers/
+  LIBS = -F/Library/Developer/CommandLineTools/Library/Frameworks -framework Python3 $${LIBS}
+  QMAKE_LFLAGS_SONAME = -Wl,-install_name,@rpath/
+  message("  <<<<<>>>>>>  here mac definitions $${PYTHON_VERSION_MAJOR}")
+  message("  <<<<<>>>>>>  here mac definitions $${INCLUDEPATH}")
+  message("  <<<<<>>>>>>  here mac definitions $${LIBS}")
+  
+
+
+  # for macx you need to have the Python development kit installed as framework
+#   INCLUDEPATH += /System/Library/Frameworks/Python.framework/Headers
+#   LIBS += -F/System/Library/Frameworks -framework Python
 } else:win32 {
   # for windows install a Python development kit or build Python yourself from the sources
   # Make sure that you set the environment variable PYTHON_PATH to point to your
