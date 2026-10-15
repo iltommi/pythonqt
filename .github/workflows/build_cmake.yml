@@ -1,0 +1,337 @@
+name: Build (CMake)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+# All jobs use the single-step CMake build: the wrappers are not in the
+# repository for these Qt versions (or are removed first), so the generator is
+# built and run while configuring.
+
+jobs:
+  ubuntu:
+    strategy:
+      fail-fast: false
+      matrix:
+        container_version:
+        - '22.04'
+        - '24.04'
+    runs-on: ubuntu-latest
+    container: ubuntu:${{ matrix.container_version }}
+    env:
+      SANITIZER_FLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
+    steps:
+    - name: Install Qt
+      run: |
+        apt-get update
+        DEBIAN_FRONTEND=noninteractive apt-get install -y --force-yes \
+        build-essential \
+        cmake \
+        python3 \
+        python3-dev \
+        libpython3-dev \
+        qtbase5-dev \
+        qtbase5-private-dev \
+        qtbase5-dev-tools \
+        qttools5-dev \
+        qtdeclarative5-dev \
+        libqt5svg5* \
+        libqt5xmlpatterns5* \
+        libqt5multimedia5* \
+        libqt5multimediawidgets5* \
+        libqt5qml5* \
+        libqt5quickwidgets5* \
+        qtmultimedia5-dev
+        apt-get clean
+
+    - name: Checkout PythonQt
+      uses: actions/checkout@v7
+
+    - name: Ccache
+      uses: hendrikmuhs/ccache-action@v1.2.24
+      with:
+         key: ${{ runner.os }}-cmake-ubuntu-${{ matrix.container_version }}
+         evict-old-files: 'job'
+
+    - name: Configure PythonQt (generates the wrappers)
+      run: |
+        echo ======= SYSTEM INFO ========
+        uname -a; gcc --version | grep "gcc"; python3 --version; cmake --version | head -n 1
+        echo ============================
+        # generate fresh wrappers instead of using the checked-in Qt 5.15 reference
+        rm -rf generated_cpp_515
+        # workaround to allow to find the Qt include dirs for installed standard qt packages
+        mkdir /usr/include/qt5; ln -s /usr/include/x86_64-linux-gnu/qt5 /usr/include/qt5/include
+        export QTDIR=/usr/include/qt5
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          "-DCMAKE_CXX_FLAGS=$SANITIZER_FLAGS" \
+          "-DCMAKE_EXE_LINKER_FLAGS=$SANITIZER_FLAGS" \
+          "-DCMAKE_SHARED_LINKER_FLAGS=$SANITIZER_FLAGS" \
+          -DPYTHONQT_QT_VERSION_MAJOR=5 \
+          -DPython3_EXECUTABLE=$(which python3) \
+          -DCMAKE_INSTALL_PREFIX=$PWD/install
+
+    - name: Show generator logs
+      if: always()
+      run: |
+        tail -n 20 build/generate_wrappers.log || true
+        tail -n 50 build/generator-bootstrap-build.log || true
+
+    - name: Build PythonQt
+      run: |
+        cmake --build build --parallel $(nproc)
+
+    - name: Run tests
+      run: |
+        PYTHONDEVMODE=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error PYTHONMALLOC=malloc_debug \
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+          ctest --test-dir build --output-on-failure
+
+    - name: Run memory tests with sanitizers
+      run: |
+        QT_VERSION_FULL=$(grep -m1 "^QT_VERSION:" build/CMakeCache.txt | cut -d = -f 2)
+        if [[ "$QT_VERSION_FULL" == 5.12* ]]; then
+          echo "leak:QPlatformIntegrationFactory::create" >> $PWD/lsan.supp
+          export LSAN_OPTIONS="suppressions=$PWD/lsan.supp"
+        fi
+        PYTHONDEVMODE=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error PYTHONMALLOC=malloc_debug \
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=1:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+        PYTHONQT_RUN_ONLY_MEMORY_TESTS=1 \
+          ./build/bin/PythonQtTest -platform minimal
+
+    - name: Run cleanup tests with sanitizers
+      run: |
+        # CPython 3.12 only: suppress its known interned-unicode leak that
+        # shows up as allocations via PyUnicode_New (python/cpython#113190).
+        # Fixed in 3.13 (python/cpython#113601), so we scope this to 3.12.
+        PYVER=$(python3 -c 'import sys; print(".".join(map(str, sys.version_info[:2])))')
+        if [[ "$PYVER" == "3.12" ]]; then
+          echo "leak:PyUnicode_New" >> $PWD/lsan.supp
+          export LSAN_OPTIONS="suppressions=$PWD/lsan.supp"
+        fi
+        PYTHONDEVMODE=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error PYTHONMALLOC=malloc_debug \
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=1:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+        PYTHONQT_RUN_ONLY_CLEANUP_TESTS=1 \
+        PYTHONQT_DISABLE_ASYNCIO=1 \
+          ./build/bin/PythonQtTest -platform minimal
+
+    - name: Install
+      run: |
+        cmake --install build
+        ls -R install | head -n 50
+
+  oldschool:
+    strategy:
+      fail-fast: false
+      matrix:
+        container_os: ['rockylinux']
+        container_os_version: ['9']
+        configuration: ['Debug', 'Release']
+    runs-on: ubuntu-latest
+    container: '${{ matrix.container_os }}:${{ matrix.container_os_version }}'
+    steps:
+    - name: Install Qt
+      run: |
+        yum update -y
+        yum groupinstall "Development Tools" -y
+        yum install -y \
+        which \
+        cmake \
+        python3-devel \
+        qt5-qtbase-* \
+        qt5-qttools* \
+        qt5-qtsvg \
+        qt5-qtxmlpatterns \
+        qt5-qtmultimedia \
+        qt5-qt3d \
+        qt5-*-devel
+
+    - name: Checkout PythonQt
+      uses: actions/checkout@v7
+
+    - name: Configure PythonQt (generates the wrappers)
+      run: |
+        echo ======= SYSTEM INFO ========
+        uname -a; gcc --version | grep "gcc"; python3 --version; cmake --version | head -n 1
+        echo ============================
+        rm -rf generated_cpp_515
+        export QTDIR=/usr/include/qt5
+        # Specify "/usr/include" so that header "bits/wordsize.h" included from "qconfig.h" is found.
+        # See https://git.rockylinux.org/staging/rpms/qt5-qtbase/-/blob/r8/SOURCES/qconfig-multilib.h
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} \
+          -DPYTHONQT_QT_VERSION_MAJOR=5 \
+          -DPYTHONQT_GENERATOR_ARGS=--include-paths=/usr/include \
+          -DPython3_EXECUTABLE=$(which python3)
+
+    - name: Show generator logs
+      if: always()
+      run: |
+        tail -n 20 build/generate_wrappers.log || true
+        tail -n 50 build/generator-bootstrap-build.log || true
+
+    - name: Build and test PythonQt
+      run: |
+        cmake --build build --parallel $(nproc)
+        PYTHONDEVMODE=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error PYTHONMALLOC=malloc_debug \
+          ctest --test-dir build --output-on-failure
+
+  macOS:
+    strategy:
+      fail-fast: false
+      matrix:
+       python-version: ['3.13']
+       qt-version: ['6.11.*']
+       configuration: ['Release', 'Debug']
+    runs-on: macos-latest
+    env:
+      SANITIZER_FLAGS: -fsanitize=address,undefined -fno-omit-frame-pointer
+    steps:
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: ${{ matrix.qt-version }}
+        host: 'mac'
+        target: 'desktop'
+        arch: 'clang_64'
+        modules: 'qt5compat qtscxml qtpositioning qtwebchannel qtmultimedia qtwebengine'
+
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v7
+      with:
+        python-version: '${{ matrix.python-version }}'
+
+    - name: Checkout PythonQt
+      uses: actions/checkout@v7
+
+    - name: Ccache
+      uses: hendrikmuhs/ccache-action@v1.2.24
+      with:
+         key: ${{ runner.os }}-cmake-${{ matrix.qt-version }}-${{ matrix.configuration }}
+         evict-old-files: 'job'
+
+    - name: Configure PythonQt (generates the wrappers)
+      run: |
+        set -ue
+        echo ======= SYSTEM INFO ========
+        uname -a; clang --version | head -n 1; python --version; cmake --version | head -n 1
+        echo ============================
+        cmake -S . -B build \
+          -DCMAKE_BUILD_TYPE=${{ matrix.configuration }} \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+          "-DCMAKE_CXX_FLAGS=$SANITIZER_FLAGS" \
+          "-DCMAKE_EXE_LINKER_FLAGS=$SANITIZER_FLAGS" \
+          "-DCMAKE_SHARED_LINKER_FLAGS=$SANITIZER_FLAGS" \
+          -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR" \
+          -DPython3_ROOT_DIR="$pythonLocation" \
+          -DPYTHON_VERSION=${{ matrix.python-version }}
+
+    - name: Show generator logs
+      if: always()
+      run: |
+        tail -n 20 build/generate_wrappers.log || true
+        tail -n 50 build/generator-bootstrap-build.log || true
+
+    - name: Build and test PythonQt
+      run: |
+        cmake --build build --parallel $(sysctl -n hw.ncpu)
+        PYTHONDEVMODE=1 PYTHONASYNCIODEBUG=1 PYTHONWARNINGS=error PYTHONMALLOC=malloc_debug \
+        UBSAN_OPTIONS="halt_on_error=1" ASAN_OPTIONS="detect_leaks=0:detect_stack_use_after_return=1:fast_unwind_on_malloc=0" \
+          ctest --test-dir build --output-on-failure
+
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+       include:
+         - qt-arch: 'win64_msvc2019_64'
+           qt-version: '5.15.*'
+           python-version: '3.13'
+           pythonqtall-config: 'PythonQtCore PythonQtGui PythonQtMultimedia'
+
+         - qt-arch: 'win64_msvc2022_64'
+           qt-version: '6.11.*'
+           python-version: '3.12'
+           modules: 'qt5compat qtscxml qtpositioning qtwebchannel qtmultimedia qtwebengine'
+           # aqtinstall 3.3.0 (latest release) lacks Qt 6.11 folder-structure support.
+           # Use git 151f6f4 until aqtinstall 3.4.0 is released (miurahr/aqtinstall#1000).
+           aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@151f6f436c2f5a5ceb7890ad970ca6f3b4d83512'
+
+         - qt-arch: 'win64_mingw73'
+           qt-version: '5.12.*'
+           python-version: '3.10'
+
+    runs-on: windows-2022
+    steps:
+
+    - name: Checkout PythonQt
+      uses: actions/checkout@v7
+
+    - name: Reset PATH
+      uses: egor-tensin/cleanup-path@v5
+
+    - name: Install MSVC++
+      uses: ilammy/msvc-dev-cmd@v1
+      if: ${{ contains(matrix.qt-arch, 'msvc') }}
+      with:
+        arch: amd64
+
+    - name: Install Qt
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: ${{ matrix.qt-version }}
+        host: 'windows'
+        target: 'desktop'
+        arch: ${{ matrix.qt-arch }}
+        modules: ${{ matrix.modules }}
+        tools: ${{ contains(matrix.qt-arch, 'mingw') && format('tools_mingw,qt.tools.{0}0', matrix.qt-arch) || '' }}
+        aqtsource: ${{ matrix.aqtsource }}
+
+    - name: Setup Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v7
+      with:
+        python-version: '${{ matrix.python-version }}'
+        architecture: x64
+
+    - name: Configure PythonQt (generates the wrappers)
+      shell: cmd
+      run: |
+        cmake --version
+        python --version
+        rmdir /s /q generated_cpp_515
+        set QTDIR=%QT_ROOT_DIR%
+        cmake -S . -B build -G "${{ contains(matrix.qt-arch, 'mingw') && 'MinGW Makefiles' || 'Ninja' }}" ^
+          -DCMAKE_BUILD_TYPE=Release ^
+          "-DCMAKE_PREFIX_PATH=%QT_ROOT_DIR%" ^
+          "-DPYTHONQTALL_CONFIG=${{ matrix.pythonqtall-config }}" ^
+          "-DPython3_ROOT_DIR=%pythonLocation%" ^
+          "-DPYTHON_VERSION=${{ matrix.python-version }}"
+
+    - name: Show generator logs
+      if: always()
+      run: |
+        tail -n 20 build/generate_wrappers.log || true
+        tail -n 50 build/generator-bootstrap-build.log || true
+
+    - name: Build and test PythonQt
+      shell: cmd
+      run: |
+        cmake --build build --parallel 2
+        if errorlevel 1 exit /b 1
+        set PYTHONDEVMODE=1
+        set PYTHONASYNCIODEBUG=1
+        set PYTHONWARNINGS=error
+        ctest --test-dir build --output-on-failure
