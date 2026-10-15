@@ -1,0 +1,13 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+set(PythonQt_QT_VERSION_MAJOR @QT_VERSION_MAJOR@)
+set(PythonQt_PYTHON_VERSION @PYTHONQT_PYTHON_VERSION@)
+
+find_dependency(Qt@QT_VERSION_MAJOR@ COMPONENTS @PYTHONQT_QT_DEPENDENCIES@)
+find_dependency(Python3 @PYTHONQT_PYTHON_VERSION@ EXACT COMPONENTS Development.Embed)
+
+include("${CMAKE_CURRENT_LIST_DIR}/PythonQtTargets.cmake")
+
+check_required_components(PythonQt)

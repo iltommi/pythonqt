@@ -1,162 +1,191 @@
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.18)
 
 #-----------------------------------------------------------------------------
-project(PythonQtGenerator)
+project(PythonQtGenerator LANGUAGES CXX)
 #-----------------------------------------------------------------------------
 
-include(CTestUseLaunchers OPTIONAL)
-
 #-----------------------------------------------------------------------------
-# Setup Qt
+# Setup Qt (also when the generator is configured on its own)
 
-set(minimum_required_qt_version "4.6.2")
-
-find_package(Qt4)
-
-if(QT4_FOUND)
-
-  set(found_qt_version ${QT_VERSION_MAJOR}.${QT_VERSION_MINOR}.${QT_VERSION_PATCH})
-
-  if(${found_qt_version} VERSION_LESS ${minimum_required_qt_version})
-      message(FATAL_ERROR "error: PythonQt requires Qt >= ${minimum_required_qt_version} -- you cannot use Qt ${found_qt_version}.")
+if(NOT PYTHONQT_QT)
+  if(PYTHONQT_QT_VERSION_MAJOR)
+    find_package(QT NAMES Qt${PYTHONQT_QT_VERSION_MAJOR} REQUIRED COMPONENTS Core)
+  else()
+    find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
   endif()
+  set(PYTHONQT_QT Qt${QT_VERSION_MAJOR})
+endif()
 
-  set(QT_USE_QTXML ON)
+find_package(${PYTHONQT_QT} REQUIRED COMPONENTS Core Xml)
 
-  include(${QT_USE_FILE})
-else()
-  message(FATAL_ERROR "error: Qt4 was not found on your system. You probably need to set the QT_QMAKE_EXECUTABLE variable")
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
 endif()
 
 #-----------------------------------------------------------------------------
 # Sources
 
-set(sources
+set(parser_sources
   parser/ast.cpp
-  parser/binder.cpp
-  parser/class_compiler.cpp
-  parser/codemodel.cpp
-  parser/codemodel_finder.cpp
-  parser/compiler_utils.cpp
-  parser/control.cpp
-  parser/declarator_compiler.cpp
-  parser/default_visitor.cpp
-  parser/dumptree.cpp
   parser/lexer.cpp
   parser/list.cpp
-  parser/name_compiler.cpp
   parser/parser.cpp
   parser/smallobject.cpp
-  parser/tokens.cpp
-  parser/type_compiler.cpp
+  parser/control.cpp
   parser/visitor.cpp
-
-  abstractmetabuilder.cpp
-  abstractmetalang.cpp
-  asttoxml.cpp
-  customtypes.cpp
-  fileout.cpp
-  generator.cpp
-  generatorset.cpp
-  generatorsetqtscript.cpp
-  main.cpp
-  metajava.cpp
-  metaqtscriptbuilder.cpp
-  metaqtscript.cpp
-  prigenerator.cpp
-  reporthandler.cpp
-  setupgenerator.cpp
-  shellgenerator.cpp
-  shellheadergenerator.cpp
-  shellimplgenerator.cpp
-  typeparser.cpp
-  typesystem.cpp
-  )
-
-#-----------------------------------------------------------------------------
-# List headers.  This list is used for the install command.
-
-set(headers
-  )
-
-#-----------------------------------------------------------------------------
-# Headers that should run through moc
-
-set(moc_sources
-  fileout.h
-  generator.h
-  generatorset.h
-  generatorsetqtscript.h
-  prigenerator.h
-  setupgenerator.h
-  shellgenerator.h
-  shellheadergenerator.h
-  shellimplgenerator.h
-  )
-
-#-----------------------------------------------------------------------------
-# UI files
-
-set(ui_sources )
-
-#-----------------------------------------------------------------------------
-# Resources
-
-set(qrc_sources
-  generator.qrc
-  )
-
-#-----------------------------------------------------------------------------
-# Do wrapping
-qt4_wrap_cpp(gen_moc_sources ${moc_sources})
-qt4_wrap_ui(gen_ui_sources ${ui_sources})
-qt4_add_resources(gen_qrc_sources ${qrc_sources})
-
-#-----------------------------------------------------------------------------
-# Copy file expected by the generator and specify install rules
-
-file(GLOB files_to_copy RELATIVE ${CMAKE_CURRENT_SOURCE_DIR} "build_*.txt" "typesystem_*.xml")
-list(APPEND files_to_copy qtscript_masterinclude.h parser/rpp/pp-qt-configuration)
-foreach(file ${files_to_copy})
-  configure_file(
-    ${file}
-    ${CMAKE_CURRENT_BINARY_DIR}/${file}
-    COPYONLY
-    )
-  get_filename_component(destination_dir ${file} PATH)
-  install(FILES ${file} DESTINATION bin/${destination_dir})
-endforeach()
-
-#-----------------------------------------------------------------------------
-# Build the library
-
-SOURCE_GROUP("Resources" FILES
-  ${qrc_sources}
-  ${ui_sources}
-  ${files_to_copy}
-  )
-
-include_directories(
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/parser
-  ${CMAKE_CURRENT_SOURCE_DIR}/parser/rpp
-  )
-
-add_definitions(-DRXX_ALLOCATOR_INIT_0)
-
-add_executable(${PROJECT_NAME}
-  ${sources}
-  ${gen_moc_sources}
-  ${gen_ui_sources}
-  ${gen_qrc_sources}
+  parser/default_visitor.cpp
+  parser/dumptree.cpp
+  parser/tokens.cpp
+  parser/binder.cpp
+  parser/codemodel.cpp
+  parser/type_compiler.cpp
+  parser/name_compiler.cpp
+  parser/declarator_compiler.cpp
+  parser/class_compiler.cpp
+  parser/codemodel_finder.cpp
+  parser/compiler_utils.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} ${QT_LIBRARIES})
+set(parser_headers
+  parser/ast.h
+  parser/lexer.h
+  parser/list.h
+  parser/parser.h
+  parser/rxx_allocator.h
+  parser/rpp-allocator.h
+  parser/smallobject.h
+  parser/tokens.h
+  parser/symbol.h
+  parser/control.h
+  parser/visitor.h
+  parser/default_visitor.h
+  parser/dumptree.h
+  parser/binder.h
+  parser/codemodel.h
+  parser/codemodel_fwd.h
+  parser/type_compiler.h
+  parser/name_compiler.h
+  parser/declarator_compiler.h
+  parser/class_compiler.h
+  parser/codemodel_finder.h
+  parser/compiler_utils.h
+)
+
+set(simplecpp_sources
+  simplecpp/simplecpp.cpp
+  simplecpp/simplecpp.h
+)
+
+set(sources
+  generator.cpp
+  main.cpp
+  reporthandler.cpp
+  typeparser.cpp
+  typesystem.cpp
+  asttoxml.cpp
+  fileout.cpp
+  generatorset.cpp
+  metajava.cpp
+  customtypes.cpp
+  abstractmetabuilder.cpp
+  abstractmetalang.cpp
+  prigenerator.cpp
+  generatorsetqtscript.cpp
+  metaqtscriptbuilder.cpp
+  metaqtscript.cpp
+  shellgenerator.cpp
+  shellimplgenerator.cpp
+  shellheadergenerator.cpp
+  setupgenerator.cpp
+)
+
+set(headers
+  generator.h
+  reporthandler.h
+  typeparser.h
+  typesystem.h
+  asttoxml.h
+  fileout.h
+  generatorset.h
+  metajava.h
+  customtypes.h
+  abstractmetabuilder.h
+  abstractmetalang.h
+  prigenerator.h
+  generatorsetqtscript.h
+  metaqtscriptbuilder.h
+  metaqtscript.h
+  shellgenerator.h
+  shellimplgenerator.h
+  shellheadergenerator.h
+  setupgenerator.h
+)
+
+# qtscript_masterinclude.h, build_all.txt and the typesystem files are
+# compiled into the executable
+set(qrc_sources
+  generator.qrc
+)
 
 #-----------------------------------------------------------------------------
-# Install library (on windows, put the dll in 'bin' and the archive in 'lib')
+# Build the executable
 
-install(TARGETS ${PROJECT_NAME}
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
+add_executable(pythonqt_generator
+  ${sources}
+  ${headers}
+  ${parser_sources}
+  ${parser_headers}
+  ${simplecpp_sources}
+  ${qrc_sources}
+)
+
+set_target_properties(pythonqt_generator PROPERTIES
+  AUTOMOC ON
+  AUTORCC ON
+  MACOSX_BUNDLE OFF
+)
+
+target_include_directories(pythonqt_generator PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/parser
+  ${CMAKE_CURRENT_SOURCE_DIR}/simplecpp
+)
+
+target_compile_definitions(pythonqt_generator PRIVATE
+  RXX_ALLOCATOR_INIT_0
+  QT_NO_CAST_TO_ASCII
+)
+
+target_link_libraries(pythonqt_generator PRIVATE
+  ${PYTHONQT_QT}::Core
+  ${PYTHONQT_QT}::Xml
+)
+
+if(MSVC)
+  # Disable warning C4996 (deprecated declarations)
+  target_compile_options(pythonqt_generator PRIVATE /wd4996)
+  if(MSVC_VERSION GREATER 1599 AND NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    # Disable warnings for external headers
+    target_compile_options(pythonqt_generator PRIVATE /external:anglebrackets /external:W0 /external:templates-)
+  endif()
+endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  target_compile_options(pythonqt_generator PRIVATE -Wno-deprecated-declarations -pedantic -Winit-self -Wuninitialized)
+endif()
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  target_compile_options(pythonqt_generator PRIVATE -Wno-nested-anon-types -Wno-gnu-anonymous-struct -Wno-unused-private-field)
+  if(MSVC)
+    target_compile_options(pythonqt_generator PRIVATE -Wno-language-extension-token -Wno-microsoft-enum-value)
+  endif()
+endif()
+
+source_group("Resources" FILES ${qrc_sources})
+
+#-----------------------------------------------------------------------------
+# Install
+
+if(NOT DEFINED PYTHONQT_INSTALL OR PYTHONQT_INSTALL)
+  include(GNUInstallDirs)
+  install(TARGETS pythonqt_generator RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
