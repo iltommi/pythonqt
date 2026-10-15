@@ -92,9 +92,13 @@ target_compile_definitions(PythonQt PRIVATE
   PYTHONQT_CATCH_ALL_EXCEPTIONS
 )
 
+# gui/ is also listed so that both "gui/PythonQtScriptingConsole.h" and
+# "PythonQtScriptingConsole.h" work
 target_include_directories(PythonQt PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/gui>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/PythonQt>
+  $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}/PythonQt/gui>
 )
 
 target_link_libraries(PythonQt
