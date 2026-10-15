@@ -156,6 +156,36 @@ endif()
 set(PYTHONQT_PYTHON_VERSION "${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}")
 message(STATUS "PythonQt: using Python ${Python3_VERSION} (${Python3_EXECUTABLE})")
 
+# Recorded in PythonQtConfig.cmake, so that consumers use the same Python
+# installation and applications can find what they have to ship
+set(PYTHONQT_PYTHON_LIBRARY "${Python3_LIBRARY_RELEASE}")
+if(NOT PYTHONQT_PYTHON_LIBRARY)
+  set(PYTHONQT_PYTHON_LIBRARY "${Python3_LIBRARY_DEBUG}")
+endif()
+set(PYTHONQT_PYTHON_RUNTIME_LIBRARY "${Python3_RUNTIME_LIBRARY_RELEASE}")
+if(NOT PYTHONQT_PYTHON_RUNTIME_LIBRARY)
+  set(PYTHONQT_PYTHON_RUNTIME_LIBRARY "${PYTHONQT_PYTHON_LIBRARY}")
+endif()
+list(GET Python3_INCLUDE_DIRS 0 PYTHONQT_PYTHON_INCLUDE_DIR)
+set(PYTHONQT_PYTHON_HOME "")
+set(PYTHONQT_PYTHON_STDLIB "")
+execute_process(
+  COMMAND "${Python3_EXECUTABLE}" -c "import sys, sysconfig; print(sys.base_prefix); print(sysconfig.get_path('stdlib'))"
+  OUTPUT_VARIABLE _pythonqt_python_paths
+  RESULT_VARIABLE _pythonqt_python_result
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(_pythonqt_python_result EQUAL 0)
+  string(REPLACE "\r" "" _pythonqt_python_paths "${_pythonqt_python_paths}")
+  string(REPLACE "\n" ";" _pythonqt_python_paths "${_pythonqt_python_paths}")
+  list(GET _pythonqt_python_paths 0 PYTHONQT_PYTHON_HOME)
+  list(GET _pythonqt_python_paths 1 PYTHONQT_PYTHON_STDLIB)
+  file(TO_CMAKE_PATH "${PYTHONQT_PYTHON_HOME}" PYTHONQT_PYTHON_HOME)
+  file(TO_CMAKE_PATH "${PYTHONQT_PYTHON_STDLIB}" PYTHONQT_PYTHON_STDLIB)
+else()
+  message(WARNING "PythonQt: could not query the Python prefix from ${Python3_EXECUTABLE}")
+endif()
+
 #-----------------------------------------------------------------------------
 # Generated wrappers
 

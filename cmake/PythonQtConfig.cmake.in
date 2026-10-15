@@ -5,8 +5,46 @@ include(CMakeFindDependencyMacro)
 set(PythonQt_QT_VERSION_MAJOR @QT_VERSION_MAJOR@)
 set(PythonQt_PYTHON_VERSION @PYTHONQT_PYTHON_VERSION@)
 
+# The Python installation PythonQt was built with. Applications that ship
+# PythonQt can use these to bundle the Python library and standard library
+# (PythonQt_PYTHON_HOME is the value for PYTHONHOME).
+set(PythonQt_PYTHON_EXECUTABLE "@Python3_EXECUTABLE@")
+set(PythonQt_PYTHON_LIBRARY "@PYTHONQT_PYTHON_LIBRARY@")
+set(PythonQt_PYTHON_RUNTIME_LIBRARY "@PYTHONQT_PYTHON_RUNTIME_LIBRARY@")
+set(PythonQt_PYTHON_INCLUDE_DIR "@PYTHONQT_PYTHON_INCLUDE_DIR@")
+set(PythonQt_PYTHON_HOME "@PYTHONQT_PYTHON_HOME@")
+set(PythonQt_PYTHON_STDLIB "@PYTHONQT_PYTHON_STDLIB@")
+
 find_dependency(Qt@QT_VERSION_MAJOR@ COMPONENTS @PYTHONQT_QT_DEPENDENCIES@)
+
+# Look for that same Python installation, unless the project chose one itself.
+# The paths are only used while they exist (the package may have been moved).
+if(NOT DEFINED Python3_EXECUTABLE AND NOT DEFINED Python3_ROOT_DIR
+   AND NOT DEFINED Python3_LIBRARY AND NOT DEFINED Python3_INCLUDE_DIR
+   AND EXISTS "${PythonQt_PYTHON_LIBRARY}" AND EXISTS "${PythonQt_PYTHON_INCLUDE_DIR}")
+  set(Python3_LIBRARY "${PythonQt_PYTHON_LIBRARY}")
+  set(Python3_INCLUDE_DIR "${PythonQt_PYTHON_INCLUDE_DIR}")
+  if(EXISTS "${PythonQt_PYTHON_EXECUTABLE}")
+    set(Python3_EXECUTABLE "${PythonQt_PYTHON_EXECUTABLE}")
+  endif()
+endif()
+if(NOT DEFINED Python3_FIND_FRAMEWORK)
+  # same as the PythonQt build: do not prefer the macOS frameworks
+  set(Python3_FIND_FRAMEWORK LAST)
+endif()
 find_dependency(Python3 @PYTHONQT_PYTHON_VERSION@ EXACT COMPONENTS Development.Embed)
+
+if(EXISTS "${PythonQt_PYTHON_LIBRARY}" AND Python3_LIBRARY_RELEASE)
+  get_filename_component(_pythonqt_built "${PythonQt_PYTHON_LIBRARY}" REALPATH)
+  get_filename_component(_pythonqt_found "${Python3_LIBRARY_RELEASE}" REALPATH)
+  if(NOT _pythonqt_built STREQUAL _pythonqt_found)
+    message(WARNING "PythonQt was built with ${PythonQt_PYTHON_LIBRARY}, "
+      "but ${Python3_LIBRARY_RELEASE} was found: two different Python libraries "
+      "may end up in the same process.")
+  endif()
+  unset(_pythonqt_built)
+  unset(_pythonqt_found)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/PythonQtTargets.cmake")
 
