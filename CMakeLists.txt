@@ -46,6 +46,13 @@ option(PYTHONQT_GENERATE_MISSING_WRAPPERS
   "Build and run the generator while configuring when no generated wrappers are found" ON)
 set(PYTHONQT_GENERATOR_ARGS "" CACHE STRING
   "Additional arguments for pythonqt_generator (e.g. --include-paths=...)")
+# When cross-compiling, the generator has to run on the build machine: either
+# give a prebuilt one, or it is built with the host compiler and the host Qt
+# (QT_HOST_PATH) while the wrappers are still generated from the target Qt headers.
+set(PYTHONQT_GENERATOR_EXECUTABLE "" CACHE FILEPATH
+  "Prebuilt pythonqt_generator that runs on the build machine; used instead of building the generator while configuring")
+set(PYTHONQT_HOST_CXX_COMPILER "" CACHE FILEPATH
+  "Host C++ compiler for the generator when cross-compiling; empty means the default one")
 
 if(NOT PYTHONQT_BUILD_GENERATOR AND NOT PYTHONQT_BUILD_RUNTIME)
   message(FATAL_ERROR "Both PYTHONQT_BUILD_GENERATOR and PYTHONQT_BUILD_RUNTIME are OFF: nothing to build.")
@@ -105,13 +112,24 @@ if(PYTHONQT_BUILD_GENERATOR)
     "Directory in which the 'generate_wrappers' target creates the generated_cpp folder")
   separate_arguments(_pythonqt_generator_args NATIVE_COMMAND "${PYTHONQT_GENERATOR_ARGS}")
 
-  add_custom_target(generate_wrappers
-    COMMAND pythonqt_generator --output-directory=${PYTHONQT_GENERATOR_OUTPUT_DIRECTORY} ${_pythonqt_generator_args}
-    WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
-    COMMENT "Generating PythonQt wrappers into ${PYTHONQT_GENERATOR_OUTPUT_DIRECTORY}/generated_cpp"
-    VERBATIM
-    USES_TERMINAL
-  )
+  if(PYTHONQT_GENERATOR_EXECUTABLE)
+    set(_pythonqt_generator_command "${PYTHONQT_GENERATOR_EXECUTABLE}")
+  elseif(NOT CMAKE_CROSSCOMPILING)
+    set(_pythonqt_generator_command pythonqt_generator)
+  else()
+    # the pythonqt_generator built here does not run on the build machine
+    set(_pythonqt_generator_command "")
+    message(STATUS "PythonQt: cross-compiling, the generate_wrappers target needs PYTHONQT_GENERATOR_EXECUTABLE")
+  endif()
+  if(_pythonqt_generator_command)
+    add_custom_target(generate_wrappers
+      COMMAND ${_pythonqt_generator_command} --output-directory=${PYTHONQT_GENERATOR_OUTPUT_DIRECTORY} ${_pythonqt_generator_args}
+      WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
+      COMMENT "Generating PythonQt wrappers into ${PYTHONQT_GENERATOR_OUTPUT_DIRECTORY}/generated_cpp"
+      VERBATIM
+      USES_TERMINAL
+    )
+  endif()
 endif()
 
 if(NOT PYTHONQT_BUILD_RUNTIME)

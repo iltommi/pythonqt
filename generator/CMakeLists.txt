@@ -17,6 +17,8 @@ if(NOT PYTHONQT_QT)
 endif()
 
 find_package(${PYTHONQT_QT} REQUIRED COMPONENTS Core Xml)
+# read by pythonqt_generate_wrappers() when cross-compiling
+message(STATUS "PythonQt generator: using Qt ${${PYTHONQT_QT}Core_VERSION}")
 
 if(NOT CMAKE_CXX_STANDARD)
   set(CMAKE_CXX_STANDARD 11)
