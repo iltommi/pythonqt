@@ -1455,6 +1455,8 @@ public:
   <object-type name="QFinalState"/>
 
   <object-type name="QXmlStreamEntityResolver"/>
+  <!-- final since Qt 6.12: the shell class must not override it (the generator ignores 'final') -->
+  <rejection class="QXmlStreamEntityResolver" function-name="resolveEntity" since-version="6.12"/>
   <object-type name="QAbstractEventDispatcher" create-promoter="no" create-shell="no" before-version="6"/>
   <object-type name="QAbstractEventDispatcher" since-version="6"/>
   <object-type name="QAbstractEventDispatcher::TimerInfo"/>
