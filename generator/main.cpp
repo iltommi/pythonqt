@@ -83,6 +83,19 @@ static QString joinPath(const QString& base, const QString& child)
 {
   return QDir(base).filePath(child);
 }
+#ifdef Q_OS_MACOS
+// Homebrew (Qt >= 6.12) installs <prefix>/include/<Module>/ with one-line stubs
+// "#include_next <QtCore/qglobal.h>" that forward to the frameworks: simplecpp does
+// not support #include_next, so such a directory must not be used, the frameworks are
+static bool isForwardingHeaderDir(const QString& qtInclude)
+{
+  QFile f(joinPath(qtInclude, QStringLiteral("QtCore/qglobal.h")));
+  if (f.size() > 1024 || !f.open(QIODevice::ReadOnly)) {
+    return false;
+  }
+  return f.readAll().contains("#include_next");
+}
+#endif
 #if QT_VERSION < QT_VERSION_CHECK(5, 10, 0)
 QString qEnvironmentVariable(const char* varName)
 {
@@ -138,6 +151,12 @@ QStringList getIncludeDirectories(const QString& commandLineIncludes)
   if (qtInclude.isEmpty()) {
     qtInclude = QLibraryInfo::location(QLibraryInfo::HeadersPath);
   }
+#ifdef Q_OS_MACOS
+  if (!qtInclude.isEmpty() && isDir(qtInclude) && isForwardingHeaderDir(qtInclude)) {
+    qInfo() << "Qt headers at" << qtInclude << "only forward to the frameworks (#include_next), using the frameworks";
+    qtInclude.clear();
+  }
+#endif
   if (!qtInclude.isEmpty() && isDir(qtInclude)) {
     qInfo() << "Using Qt headers at:" << qtInclude;
     // Check for <qtInclude>/<Module>
@@ -230,6 +249,9 @@ bool preprocess(const QString& sourceFile, const QString& targetFile, const QStr
 #ifdef Q_PROCESSOR_X86_64
   dui.defines.push_back("__x86_64__");
 #endif
+  // multilib distributions (e.g. Fedora x86_64) select qconfig-32.h / qconfig-64.h on
+  // __WORDSIZE, normally from the system header <bits/wordsize.h> that is not searched here
+  dui.defines.push_back("__WORDSIZE=" + std::to_string(QT_POINTER_SIZE * 8));
   dui.std = "c++20";
   dui.removeComments = true;
 
