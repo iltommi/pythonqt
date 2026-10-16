@@ -141,6 +141,10 @@ target_compile_definitions(PythonQt_QtAll PRIVATE
   PYTHONQT_QTALL_EXPORTS
   ${qtall_defines}
 )
+if(NOT PYTHONQT_BUILD_SHARED)
+  # on Windows the headers would otherwise declare the symbols as imported from a dll
+  target_compile_definitions(PythonQt_QtAll PUBLIC PYTHONQT_QTALL_STATIC)
+endif()
 
 target_include_directories(PythonQt_QtAll PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>

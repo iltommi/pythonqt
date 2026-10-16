@@ -91,6 +91,10 @@ target_compile_definitions(PythonQt PRIVATE
   PYTHONQT_EXPORTS
   PYTHONQT_CATCH_ALL_EXCEPTIONS
 )
+if(NOT PYTHONQT_BUILD_SHARED)
+  # on Windows the headers would otherwise declare the symbols as imported from a dll
+  target_compile_definitions(PythonQt PUBLIC PYTHONQT_STATIC)
+endif()
 
 # gui/ is also listed so that both "gui/PythonQtScriptingConsole.h" and
 # "PythonQtScriptingConsole.h" work

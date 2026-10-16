@@ -34,7 +34,10 @@
  */
 
 #ifdef WIN32
-  #ifdef PYTHONQT_QTALL_EXPORTS
+  #if defined(PYTHONQT_QTALL_STATIC)
+    // static library: nothing is imported from a dll (set by CMake for the users of a static PythonQt_QtAll)
+    #define PYTHONQT_QTALL_EXPORT
+  #elif defined(PYTHONQT_QTALL_EXPORTS)
     #define PYTHONQT_QTALL_EXPORT __declspec(dllexport)
   #else
     #define PYTHONQT_QTALL_EXPORT __declspec(dllimport)

@@ -114,7 +114,31 @@ function(pythonqt_generate_wrappers out_var)
       endif()
       set(_env "${CMAKE_COMMAND}" -E env
         --unset=CC --unset=CXX --unset=CFLAGS --unset=CXXFLAGS --unset=CPPFLAGS --unset=LDFLAGS
-        --unset=CMAKE_TOOLCHAIN_FILE --unset=CMAKE_PREFIX_PATH --unset=PKG_CONFIG_PATH)
+        --unset=FFLAGS --unset=FCFLAGS --unset=RUSTFLAGS
+        --unset=CMAKE_TOOLCHAIN_FILE --unset=CMAKE_PREFIX_PATH --unset=PKG_CONFIG_PATH --unset=PKG_CONFIG_LIBDIR)
+      # the cross environment may also put the target binutils first in PATH (Fedora's
+      # mingw64-cmake adds /usr/x86_64-w64-mingw32/bin): the host compiler would then
+      # call the target assembler. Use the PATH saved by the environment (PATH_ORIG),
+      # otherwise drop the <triple>/bin entries.
+      if(NOT CMAKE_HOST_WIN32)
+        if(DEFINED ENV{PATH_ORIG})
+          set(_host_path "$ENV{PATH_ORIG}")
+        else()
+          string(REPLACE ":" ";" _host_path "$ENV{PATH}")
+          get_filename_component(_cxx_name "${CMAKE_CXX_COMPILER}" NAME)
+          if(CMAKE_CXX_COMPILER_TARGET)
+            set(_triple "${CMAKE_CXX_COMPILER_TARGET}")
+          elseif(_cxx_name MATCHES "^(.+)-(g\\+\\+|c\\+\\+|clang\\+\\+)")
+            set(_triple "${CMAKE_MATCH_1}")
+          endif()
+          if(_triple)
+            string(REPLACE "." "\\." _triple "${_triple}")
+            list(FILTER _host_path EXCLUDE REGEX "/${_triple}/bin/?$")
+          endif()
+          string(REPLACE ";" ":" _host_path "${_host_path}")
+        endif()
+        list(APPEND _env "PATH=${_host_path}")
+      endif()
     else()
       set(_forward
         CMAKE_MAKE_PROGRAM CMAKE_CXX_COMPILER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_TOOLCHAIN_FILE
